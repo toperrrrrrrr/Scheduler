@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>9-Hour Shift Scheduler</title>
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --secondary-color: #f3f4f6;
+            --border-color: #e5e7eb;
+            --danger-color: #ef4444;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            padding: 20px;
+            background-color: #f9fafb;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        h1, h2 {
+            color: #111827;
+            margin-bottom: 1rem;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        .schedule-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        .schedule-table th,
+        .schedule-table td {
+            border: 1px solid var(--border-color);
+            padding: 0.5rem;
+            text-align: center;
+        }
+
+        .schedule-table th {
+            background-color: var(--secondary-color);
+        }
+
+        .leave-day {
+            background-color: #fee2e2;
+        }
+
+        .agent-list {
+            list-style: none;
+            margin-bottom: 1rem;
+        }
+
+        .agent-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem;
+            border: 1px solid var(--border-color);
+            margin-bottom: 0.5rem;
+            border-radius: 4px;
+        }
+
+        .delete-btn {
+            background-color: var(--danger-color);
+            padding: 0.25rem 0.5rem;
+        }
+
+        .shift-cell {
+            position: relative;
+        }
+
+        .shift-time {
+            font-size: 0.8em;
+            color: #666;
+        }
+
+        @media (max-width: 768px) {
+            .schedule-table {
+                font-size: 0.875rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>9-Hour Shift Scheduler</h1>
+        
+        <div class="card">
+            <h2>Team Management</h2>
+            <form id="agentForm">
+                <div class="form-group">
+                    <label for="agentName">Agent Name</label>
+                    <input type="text" id="agentName" required placeholder="Enter agent name">
+                </div>
+                <button type="submit">Add Agent</button>
+            </form>
+            
+            <h3>Current Team</h3>
+            <ul id="agentList" class="agent-list"></ul>
+        </div>
+
+        <div class="card">
+            <h2>Leave Management</h2>
+            <form id="leaveForm">
+                <div class="form-group">
+                    <label for="leaveAgent">Select Agent</label>
+                    <select id="leaveAgent" required></select>
+                </div>
+                <div class="form-group">
+                    <label for="leaveDay">Select Day</label>
+                    <select id="leaveDay" required>
+                        <option value="Monday">Monday</option>
+                        <option value="Tuesday">Tuesday</option>
+                        <option value="Wednesday">Wednesday</option>
+                        <option value="Thursday">Thursday</option>
+                        <option value="Friday">Friday</option>
+                    </select>
+                </div>
+                <button type="submit">Add Leave</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>Weekly Schedule</h2>
+            <button id="generateSchedule">Generate Schedule</button>
+            <div id="scheduleContainer"></div>
+        </div>
+    </div>
+
+    <script>
+        class ShiftScheduler {
+            constructor() {
+                this.agents = [];
+                this.leaves = new Map();
+                this.SHIFT_START = 5; // 5 AM
+                this.SHIFT_END = 20;  // 8 PM
+                this.SHIFT_DURATION = 9; // 9 hours
+                this.DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+                this.SHIFT_STARTS = [5, 8, 11]; // Possible shift start times
+                
+                this.initializeEventListeners();
+                this.updateAgentDropdown();
+            }
+
+            initializeEventListeners() {
+                document.getElementById('agentForm').addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.addAgent();
+                });
+
+                document.getElementById('leaveForm').addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.addLeave();
+                });
+
+                document.getElementById('generateSchedule').addEventListener('click', () => {
+                    this.generateSchedule();
+                });
+            }
+
+            addAgent() {
+                const name = document.getElementById('agentName').value;
+                
+                const agent = {
+                    id: Date.now(),
+                    name
+                };
+
+                this.agents.push(agent);
+                this.updateAgentList();
+                this.updateAgentDropdown();
+                document.getElementById('agentForm').reset();
+            }
+
+            updateAgentList() {
+                const agentList = document.getElementById('agentList');
+                agentList.innerHTML = '';
+
+                this.agents.forEach(agent => {
+                    const li = document.createElement('li');
+                    li.className = 'agent-item';
+                    li.innerHTML = `
+                        <span>${agent.name}</span>
+                        <button class="delete-btn" onclick="scheduler.deleteAgent(${agent.id})">Delete</button>
+                    `;
+                    agentList.appendChild(li);
+                });
+            }
+
+            updateAgentDropdown() {
+                const leaveAgent = document.getElementById('leaveAgent');
+                leaveAgent.innerHTML = '';
+                
+                this.agents.forEach(agent => {
+                    const option = document.createElement('option');
+                    option.value = agent.id;
+                    option.textContent = agent.name;
+                    leaveAgent.appendChild(option);
+                });
+            }
+
+            deleteAgent(id) {
+                this.agents = this.agents.filter(agent => agent.id !== id);
+                this.updateAgentList();
+                this.updateAgentDropdown();
+            }
+
+            addLeave() {
+                const agentId = document.getElementById('leaveAgent').value;
+                const day = document.getElementById('leaveDay').value;
+
+                if (!this.leaves.has(agentId)) {
+                    this.leaves.set(agentId, new Set());
+                }
+                this.leaves.get(agentId).add(day);
+
+                document.getElementById('leaveForm').reset();
+                this.generateSchedule();
+            }
+
+            generateTimeSlots() {
+                const slots = [];
+                for (let i = this.SHIFT_START; i <= this.SHIFT_END; i++) {
+                    slots.push(`${i.toString().padStart(2, '0')}:00`);
+                }
+                return slots;
+            }
+
+            isAgentOnLeave(agentId, day) {
+                const agentLeaves = this.leaves.get(agentId.toString());
+                return agentLeaves && agentLeaves.has(day);
+            }
+
+            shuffleArray(array) {
+                for (let i = array.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [array[i], array[j]] = [array[j], array[i]];
+                }
+                return array;
+            }
+
+            generateSchedule() {
+                const scheduleContainer = document.getElementById('scheduleContainer');
+                const schedule = {};
+                
+                // Initialize schedule
+                this.DAYS.forEach(day => {
+                    schedule[day] = {};
+                    this.SHIFT_STARTS.forEach(startHour => {
+                        schedule[day][startHour] = null;
+                    });
+                });
+
+                // Generate schedule for each day
+                this.DAYS.forEach(day => {
+                    const availableAgents = this.agents.filter(agent => 
+                        !this.isAgentOnLeave(agent.id, day)
+                    );
+                    
+                    const shuffledAgents = this.shuffleArray([...availableAgents]);
+                    const shuffledShifts = this.shuffleArray([...this.SHIFT_STARTS]);
+                    
+                    shuffledShifts.forEach((startHour, index) => {
+                        if (index < shuffledAgents.length) {
+                            schedule[day][startHour] = shuffledAgents[index];
+                        }
+                    });
+                });
+
+                // Generate HTML
+                let html = '<table class="schedule-table"><thead><tr><th>Time</th>';
+                this.DAYS.forEach(day => {
+                    html += `<th>${day}</th>`;
+                });
+                html += '</tr></thead><tbody>';
+
+                this.SHIFT_STARTS.forEach(startHour => {
+                    html += `<tr><td>${startHour}:00 - ${startHour + 9}:00</td>`;
+                    
+                    this.DAYS.forEach(day => {
+                        const agent = schedule[day][startHour];
+                        const isLeave = agent && this.isAgentOnLeave(agent.id, day);
+                        const cellClass = isLeave ? 'leave-day' : '';
+                        
+                        html += `<td class="${cellClass}">`;
+                        html += agent ? agent.name : 'Unassigned';
+                        html += '</td>';
+                    });
+                    
+                    html += '</tr>';
+                });
+
+                html += '</tbody></table>';
+                scheduleContainer.innerHTML = html;
+            }
+        }
+
+        const scheduler = new ShiftScheduler();
+    </script>
+</body>
+</html>
